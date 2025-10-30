@@ -1,0 +1,96 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+Person(super_admin, "Super Admin", "Системный администратор платформы")
+Person(partner_admin, "Partner Admin", "Администратор партнёра")
+Person(partner_user, "Partner User", "Пользователь партнёра")
+Person(end_customer, "End Customer", "Конечный пользователь")
+
+System_Boundary(edge, "Edge Layer") {
+    Container(api_gateway, "API Gateway", "Kong", "Маршрутизация + Аутентификация\nTenant resolution")
+    Container(cdn, "CDN", "CloudFront", "Статика + WAF\nTenant-specific assets")
+}
+
+System_Boundary(iam, "IAM & Security") {
+    Container(keycloak, "Keycloak", "Identity Provider", "Multi-tenant SSO\nRBAC + ABAC\nSAML/OIDC")
+    ContainerDb(keycloak_db, "IAM Database", "PostgreSQL", "Пользователи, роли, политики\nTenant realms")
+    Container(auth_service, "Auth Service", "Django", "JWT валидация\nTenant context injection")
+}
+
+System_Boundary(tenant_mgmt, "Tenant Management") {
+    Container(tenant_service, "Tenant Service", "Django", "Управление тенантами\nOnboarding/Offboarding")
+    ContainerDb(tenant_registry, "Tenant Registry", "PostgreSQL", "Реестр партнёров\nКонфигурации\nЛимиты и квоты")
+    Container(onboarding_engine, "Onboarding Engine", "Airflow", "Автоматизация подключения\nWorkflow orchestration")
+}
+
+System_Boundary(microservices, "Multi-tenant Microservices") {
+    Container(booking_svc, "Booking Service", "Django", "Tenant-aware бронирования\nИзоляция данных")
+    Container(driver_svc, "Driver Service", "Django", "Управление водителями\nTenant-specific правила")
+    Container(pricing_svc, "Pricing Service", "Django", "Кастомное ценообразование\nДинамические тарифы")
+    Container(reporting_svc, "Reporting Service", "Django", "Отчетность по тенантам\nAnalytics")
+}
+
+System_Boundary(data_layer, "Data Isolation Layer") {
+    ContainerDb(premium_db_1, "Premium DB 1", "PostgreSQL", "Крупный партнёр 1\nПолная изоляция")
+    ContainerDb(premium_db_2, "Premium DB 2", "PostgreSQL", "Крупный партнёр 2\nПолная изоляция")
+    ContainerDb(shared_db, "Shared Database", "PostgreSQL", "Мелкие партнёры\nRow-level security")
+    ContainerDb(tenant_config_db, "Config Database", "PostgreSQL", "Конфигурации\nTenant metadata")
+}
+
+System_Boundary(monitoring, "Multi-tenant Monitoring") {
+    Container(prometheus, "Prometheus", "Metrics", "Сбор метрик per-tenant")
+    Container(grafana, "Grafana", "Dashboards", "Дашборды per-tenant")
+    Container(alert_manager, "Alert Manager", "Alerts", "Уведомления по тенантам")
+    Container(quota_service, "Quota Service", "Custom", "Контроль лимитов\nUsage tracking")
+}
+
+System_Boundary(external, "External Systems") {
+    Container(partner_sso, "Partner SSO", "SAML/OIDC", "Корпоративная аутентификация")
+    Container(partner_api, "Partner API", "REST", "Интеграция с системами партнёра")
+    Container(onboarding_ui, "Onboarding Portal", "React", "Самостоятельная регистрация")
+}
+
+
+Rel(end_customer, cdn, "HTTPS", "Tenant-specific domain")
+Rel(partner_user, api_gateway, "HTTPS + JWT", "API access")
+Rel(partner_admin, api_gateway, "HTTPS + JWT", "Admin operations")
+Rel(super_admin, api_gateway, "HTTPS + JWT", "Platform management")
+
+Rel(api_gateway, auth_service, "Validate token", "JWT verification")
+Rel(auth_service, keycloak, "User authentication", "OIDC/SAML")
+Rel(keycloak, keycloak_db, "Read/write", "User data")
+Rel(partner_sso, keycloak, "Federation", "SAML 2.0")
+
+Rel(auth_service, tenant_service, "Get tenant context", "Tenant ID resolution")
+Rel(api_gateway, booking_svc, "Forward + tenant_id", "Tenant-aware routing")
+Rel(api_gateway, driver_svc, "Forward + tenant_id", "Tenant-aware routing")
+Rel(api_gateway, pricing_svc, "Forward + tenant_id", "Tenant-aware routing")
+Rel(api_gateway, reporting_svc, "Forward + tenant_id", "Tenant-aware routing")
+
+Rel(booking_svc, premium_db_1, "Tenant 1 data", "Direct connection")
+Rel(booking_svc, premium_db_2, "Tenant 2 data", "Direct connection")
+Rel(booking_svc, shared_db, "Small tenants", "RLS with tenant_id")
+Rel(driver_svc, shared_db, "Driver data", "RLS with tenant_id")
+Rel(pricing_svc, shared_db, "Pricing data", "RLS with tenant_id")
+
+Rel(tenant_service, tenant_registry, "Read/write", "Tenant management")
+Rel(booking_svc, tenant_config_db, "Read config", "Tenant settings")
+Rel(pricing_svc, tenant_config_db, "Read config", "Pricing rules")
+
+Rel(super_admin, onboarding_ui, "Initiate onboarding", "Admin portal")
+Rel(partner_api, onboarding_engine, "API integration", "Automated setup")
+Rel(onboarding_engine, tenant_service, "Create tenant", "Configuration")
+Rel(onboarding_engine, keycloak, "Setup realm", "IAM configuration")
+Rel(onboarding_engine, premium_db_1, "Create schema", "Database setup")
+
+Rel(booking_svc, prometheus, "Export metrics", "Tenant-id labeled")
+Rel(driver_svc, prometheus, "Export metrics", "Tenant-id labeled")
+Rel(pricing_svc, prometheus, "Export metrics", "Tenant-id labeled")
+Rel(quota_service, prometheus, "Check usage", "Quota monitoring")
+Rel(prometheus, grafana, "Query data", "Tenant dashboards")
+Rel(grafana, alert_manager, "Trigger alerts", "Tenant notifications")
+
+Rel(quota_service, tenant_registry, "Read limits", "Tenant quotas")
+Rel(quota_service, booking_svc, "Enforce limits", "Usage tracking")
+
+@enduml
