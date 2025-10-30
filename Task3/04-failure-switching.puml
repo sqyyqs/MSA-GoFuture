@@ -1,0 +1,46 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+Person(user, "Пользователь", "Такси-сервис в ЮВА или ЮА")
+
+Component(geo_dns, "GeoDNS", "Route53 Latency Routing", "Маршрутизация по задержке")
+
+System_Boundary(singapore_region, "регион Сингапур") {
+    Component(singapore_lb, "ALB", "Application Load Balancer", "Балансировка нагрузки")
+    Container(singapore_app, "Booking Service", "Django", "Сингапурский сервис бронирования")
+    Container(singapore_db, "PostgreSQL", "Database", "Сингапурская база данных")
+    Container(singapore_kafka, "Kafka Cluster", "Apache Kafka", "Сингапурская кафка")
+}
+
+System_Boundary(buenos_aires_region, "регион Буэнос-Айрес") {
+    Component(buenos_aires_lb, "ALB", "Application Load Balancer", "Балансировка нагрузки")
+    Container(buenos_aires_app, "Booking Service", "Django", "Горячий резерв")
+    Container(buenos_aires_db, "PostgreSQL", "Database", "Sync replica")
+    Container(buenos_aires_kafka, "Kafka Cluster", "Apache Kafka", "Async replica")
+}
+
+System_Boundary(main_region, "Главный регион") {
+    Component(main_lb, "ALB", "Application Load Balancer", "DR балансировка")
+    Container(main_app, "Booking Service", "Django", "Холодный резерв")
+    Container(main_db, "PostgreSQL", "Database", "Async replica")
+}
+
+Rel(user, geo_dns, "DNS запрос", "HTTPS")
+Rel(geo_dns, singapore_lb, "routing", "HTTPS")
+Rel(geo_dns, buenos_aires_lb, "routing", "HTTPS")
+Rel(geo_dns, main_lb, "routing", "HTTPS")
+Rel(geo_dns, main_lb, "Failover routing", "HTTPS")
+
+Rel(singapore_db, buenos_aires_db, "Синхронная репликация", "Streaming")
+Rel(singapore_db, main_db, "Асинхронная репликация", "WAL Shipping")
+Rel(singapore_kafka, buenos_aires_kafka, "Межрегиональная репликация", "MirrorMaker2")
+
+Rel(singapore_lb, buenos_aires_lb, "Health checks", "HTTP")
+Rel(buenos_aires_lb, main_lb, "Health checks", "HTTP")
+
+System_Ext(ext_dns, "External DNS", "Интернет провайдеры")
+
+Rel(user, ext_dns, "DNS разрешение", "UDP")
+Rel(ext_dns, geo_dns, "DNS запрос", "UDP")
+
+@enduml

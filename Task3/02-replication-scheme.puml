@@ -1,0 +1,22 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+System_Boundary(kafka_replication, "Репликация Кафка") {
+    Container(buenos_aires_kafka, "Аргентинская Кафка")
+    Container(singapore_kafka, "Сингапурская Кафка")
+    Container(main_kafka, "Главная кафка в центральном офисе FutureGo")
+
+    Container(mm2, "Mirror Maker 2", "утилита для репликации данных кафки")
+
+    Rel(main_kafka, mm2, Реплицирует)
+    Rel(mm2, buenos_aires_kafka, Реплицирует)
+    Rel(mm2, singapore_kafka, Реплицирует)
+}
+
+System_Boundary(db_replication, "БД шардируется, данные между ними не реплицируются") {
+    Container(buenos_aires_db, "Аргентинская БД")
+    Container(singapore_db, "Сингапурская БД")
+    Container(main_db, "Главная БД в центральном офисе FutureGo")
+}
+
+@enduml
