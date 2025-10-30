@@ -1,0 +1,61 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+Person(data_scientist, "Data Scientist", "Команда ML и аналитики")
+Person(business_analyst, "Business Analyst", "Бизнес-аналитики")
+
+System_Boundary(ml_platform, "ML Platform") {
+    Container(training, "Training", "k8s + python")
+    Container(monitoring, "Monitoring", "Качество обучения моделей")
+    Container(ai_api, "AI API")
+    Container(ai_orchestrator, "Airflow", "Оркестрация")
+    ContainerDb(feature_store, "Feature Store", "Feast/Hopsworks", "Централизованное хранение\nфич для моделей")
+
+    Rel(monitoring, training, следит за)
+    Rel(training, feature_store, сохраняет)
+    Rel(ai_api, feature_store, работает с)
+
+    Rel(ai_orchestrator, ai_api, оркестрирует процесс)
+    Rel(ai_orchestrator, training, оркестрирует процесс)
+}
+
+
+System_Boundary(data_platform, "Data Platform") {
+    ContainerQueue(kafka_cluster, "Kafka Cluster", "Apache Kafka", "Централизованный сбор")
+    Container(stream_processing, "Stream Processing", "Apache Flink", "Обработка потоковых данных и агрегация")
+    ContainerDb(data_lake, "Data Lake", "S3 minio", "Хранилище сырых данных")
+    ContainerDb(data_warehouse, "Data Warehouse", "ClickHouse", "Аналитическое хранилище")
+}
+
+
+System_Boundary(microservices, "микросервисы") {
+    Container(booking_service, "Booking Service", "Django Application", "Сервис, отвечающий за управление заказами")
+    Container(driver_service, "Driver Service", "Django Application", "Сервис, отвечающий за модуль управления аккаунтами водителей")
+    Container(pricing_service, "Pricing Service", "Django Application", "Сервис, отвечающий за формирование цен")
+    Container(payment_service, "Payments Service", "Django Application", "Сервис, отвечающий за провод платежей")
+    Container(notification_service, "Notification Service", "Django Application", "Сервис, отвечающий за отправку обновлений")
+    Container(geo_service, "GeoProcessing Service", "Django Application", "Сервис, отвечающий за работу с геоданными")
+}
+
+System_Boundary(bi, "BI") {
+    Container(datalens, "DataLens")
+}
+
+Rel(booking_service, kafka_cluster, "Публикует события")
+Rel(driver_service, kafka_cluster, "Публикует события")
+Rel(pricing_service, kafka_cluster, "Публикует события")
+Rel(payment_service, kafka_cluster, "Публикует события")
+Rel(geo_service, kafka_cluster, "Публикует события")
+
+Rel(kafka_cluster, stream_processing, "Поток событий", "Avro/Protobuf")
+Rel(stream_processing, data_lake, "Сырые данные", "Parquet files")
+Rel(stream_processing, feature_store, "Real-time features", "Online features")
+Rel(stream_processing, data_warehouse, "Агрегированные данные", "OLAP queries")
+
+Rel(data_lake, ai_orchestrator, "Данные для обучения")
+Rel(data_warehouse, datalens, "Визуализирует данные")
+Rel(pricing_service, kafka_cluster, "Feedback loop", "PriceEffectiveness")
+Rel(data_scientist, ai_orchestrator, "Эксперименты и настройка")
+Rel(business_analyst, datalens, "Анализ и отчеты")
+
+@enduml
