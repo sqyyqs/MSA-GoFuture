@@ -1,0 +1,47 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+Container(booking_service, "Booking Service", "Django Application", "Сервис, отвечающий за управление заказами")
+Container(driver_service, "Driver Service", "Django Application", "Сервис, отвечающий за модуль управления аккаунтами водителей")
+Container(pricing_service, "Pricing Service", "Django Application", "Сервис, отвечающий за формирование цен")
+Container(payments_service, "Payments Service", "Django Application", "Сервис, отвечающий за провод платежей")
+Container(notification_service, "Notification Service", "Django Application", "Сервис, отвечающий за отправку обновлений")
+Container(geo_service, "GeoProcessing Service", "Django Application", "Сервис, отвечающий за работу с геоданными")
+
+Container(flink, "real-time обработчик", "Apache Flink")
+
+ContainerQueue(kafka_cluster, "Kafka Cluster", "Apache Kafka")
+
+ContainerQueue(booking_topic, "booking-topic", "Topic", "Партиционирование по geo_zone (например по городу или району)")
+ContainerQueue(driver_topic, "driver-topic", "Topic", "Партиционирование по region_id")
+ContainerQueue(payment_topic, "payment-topic", "Topic", "Партиционирование по user_id" )
+
+Rel(kafka_cluster, booking_topic, "Содержит")
+Rel(kafka_cluster, driver_topic, "Содержит")
+Rel(kafka_cluster, payment_topic, "Содержит")
+
+Rel(booking_service,kafka_cluster, "Потребляет")
+Rel(driver_service,kafka_cluster, "Потребляет")
+Rel(payments_service,kafka_cluster, "Потребляет")
+Rel(notification_service,kafka_cluster, "Потребляет")
+Rel(kafka_cluster, flink, "Потребляет")
+
+
+Container(flink_orchestration, "Flink OrchestrationJob", "Apache Flink", "Оркестрация через apache flink")
+Container(flink_price_calculation, "Flink PriceCalculationJob", "Apache Flink", "Рассчет цены через джобу apache flink")
+
+Rel(flink, flink_orchestration, "Содержит")
+Rel(flink, flink_price_calculation, "Содержит")
+Rel(flink, pricing_service, "Интегрируется с ")
+
+Container(prometheus, "Prometheus", "Metrics")
+Container(grafana, "Grafana", "Dashboards", "Дашборды")
+Container(alert_manager, "AlertManager", "Alerts", "Сообщения об ошибках")
+Container(kafka_exporter, "Kafka Exporter", "Exporter")
+
+Rel(kafka_exporter, kafka_cluster, "Забирает метрики из")
+Rel(kafka_exporter, prometheus, "Отправляет метрики в")
+Rel(alert_manager, prometheus, "Анализирует метрики из")
+Rel(grafana, prometheus, "Визуализирует")
+
+@enduml
